@@ -27,6 +27,8 @@ const SHEET_NAME = "工作表1";
 // 寫入 Sheet
 async function addRow(item, amount) {
   try {
+    console.log("CLIENT:", creds.client_email);
+    console.log("KEY LENGTH:", creds.private_key?.length);  
     console.log("👉 ADD ROW START");
 
     const doc = new GoogleSpreadsheet(SHEET_ID);
