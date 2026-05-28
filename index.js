@@ -9,15 +9,15 @@ const app = express();
 // LINE
 const config = {
   channelSecret: process.env.CHANNEL_SECRET,
+  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
 };
 
-const client = new line.messagingApi.MessagingApiClient({
-  channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
-});
+const client = new line.Client(config);
+
 
 const creds = {
   client_email: process.env.GOOGLE_CLIENT_EMAIL,
-  private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
 };
 
 // Google Sheet
@@ -28,7 +28,10 @@ const SHEET_NAME = "工作表1";
 async function addRow(item, amount) {
   const doc = new GoogleSpreadsheet(SHEET_ID);
 
-  await doc.useServiceAccountAuth(creds);
+  await doc.useServiceAccountAuth({
+    client_email: creds.client_email,
+    private_key: creds.private_key,
+  });
   await doc.loadInfo();
 
   const sheet = doc.sheetsByTitle[SHEET_NAME];
