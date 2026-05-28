@@ -13,6 +13,6 @@
     "@line/bot-sdk": "^6.8.4",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "google-spreadsheet": "^5.2.0"
+    "google-spreadsheet": "^3.3.0"
   }
 }
