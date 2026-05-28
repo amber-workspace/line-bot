@@ -27,9 +27,6 @@ const SHEET_NAME = "工作表1";
 // 寫入 Sheet
 async function addRow(item, amount) {
   try {
-    console.log("CLIENT:", creds.client_email);
-    console.log("KEY LENGTH:", creds.private_key?.length);  
-    console.log("👉 ADD ROW START");
 
     const doc = new GoogleSpreadsheet(SHEET_ID);
 
@@ -37,13 +34,8 @@ async function addRow(item, amount) {
       client_email: creds.client_email,
       private_key: creds.private_key,
     });
-console.log("👉 AUTH OK");
 
     await doc.loadInfo();
-
-     console.log("👉 SHEET LOADED");
-
-    
 
     const sheet = doc.sheetsByTitle[SHEET_NAME];
 
@@ -78,54 +70,66 @@ app.post("/callback", line.middleware(config), async (req, res) => {
 
 
 async function handleEvent(event) {
-  console.log("LINE EVENT RECEIVED:", JSON.stringify(event));
 
+  // 只處理文字訊息
   if (event.type !== "message") return;
 
   if (!event.message || !event.message.text) return;
 
-  const text = event.message.text;
+  if (!event.replyToken) return;
+
+  const text = event.message.text.trim();
 
   const parts = text.split(" ");
 
+  // 格式錯誤
   if (parts.length !== 2) {
-    return client.replyMessage({
-      replyToken: event.replyToken,
-      messages: [
+
+    await client.replyMessage(
+      event.replyToken,
+      [
         {
           type: "text",
           text: "格式：項目 金額（例如 午餐 100）",
         },
-      ],
-    });
+      ]
+    );
+
+    return;
   }
 
   const [item, amount] = parts;
 
   try {
+
+    // 寫入 Google Sheet
     await addRow(item, amount);
 
-    return client.replyMessage({
-      replyToken: event.replyToken,
-      messages: [
+    // 回覆成功訊息
+    await client.replyMessage(
+      event.replyToken,
+      [
         {
           type: "text",
           text: `已記錄：${item} ${amount}`,
         },
-      ],
-    });
-  } catch (err) {
-    console.error("addRow error:", err);
+      ]
+    );
 
-    return client.replyMessage({
-      replyToken: event.replyToken,
-      messages: [
+  } catch (err) {
+
+    console.error("❌ handleEvent error:", err);
+
+    // 回覆失敗訊息
+    await client.replyMessage(
+      event.replyToken,
+      [
         {
           type: "text",
-          text: "記錄失敗（Google Sheet 授權問題）",
+          text: "記錄失敗，請稍後再試",
         },
-      ],
-    });
+      ]
+    );
   }
 }
 
