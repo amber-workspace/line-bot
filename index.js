@@ -3,7 +3,6 @@ require("dotenv").config();
 const express = require("express");
 const line = require("@line/bot-sdk");
 const { GoogleSpreadsheet } = require("google-spreadsheet");
-const creds = require("./google-credentials.json");
 
 const app = express();
 
@@ -15,6 +14,11 @@ const config = {
 const client = new line.messagingApi.MessagingApiClient({
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
 });
+
+const creds = {
+  client_email: process.env.GOOGLE_CLIENT_EMAIL,
+  private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+};
 
 // Google Sheet
 const SHEET_ID = "1GuaCuT9iu7K3fHO89MyaBHXfB7hTesYQBp_F-_L9img";
