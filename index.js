@@ -14,7 +14,7 @@ const config = {
 
 const client = new line.Client(config);
 
-
+// Google Credentials
 const creds = {
   client_email: process.env.GOOGLE_CLIENT_EMAIL,
   private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
@@ -26,58 +26,87 @@ const SHEET_NAME = "工作表1";
 
 // 寫入 Sheet
 async function addRow(item, amount) {
-  const doc = new GoogleSpreadsheet(SHEET_ID);
+  try {
+    const doc = new GoogleSpreadsheet(SHEET_ID);
 
-  await doc.useServiceAccountAuth({
-    client_email: creds.client_email,
-    private_key: creds.private_key,
-  });
-  await doc.loadInfo();
+    await doc.useServiceAccountAuth({
+      client_email: creds.client_email,
+      private_key: creds.private_key,
+    });
 
-  const sheet = doc.sheetsByTitle[SHEET_NAME];
+    await doc.loadInfo();
 
-  await sheet.addRow({
-    日期: new Date().toLocaleString(),
-    項目: item,
-    金額: amount,
-  });
+    const sheet = doc.sheetsByTitle[SHEET_NAME];
+
+    if (!sheet) {
+      console.log("Sheet not found:", SHEET_NAME);
+      return;
+    }
+
+    await sheet.addRow({
+      日期: new Date().toLocaleString(),
+      項目: item,
+      金額: amount,
+    });
+
+    console.log("✔ 已寫入 Google Sheet");
+  } catch (err) {
+    console.error("❌ addRow error:", err);
+  }
 }
 
 // LINE webhook
 app.post("/callback", line.middleware(config), async (req, res) => {
-  const events = req.body.events;
-
-  await Promise.all(events.map(handleEvent));
-
-  res.sendStatus(200);
+  try {
+    const events = req.body.events;
+    await Promise.all(events.map(handleEvent));
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("Webhook error:", err);
+    res.sendStatus(500);
+  }
 });
 
 async function handleEvent(event) {
   if (event.type !== "message") return;
 
-  const text = event.message.text;
+  const text = event.message.text.trim();
 
-  // 簡單解析：午餐 120
   const parts = text.split(" ");
 
   if (parts.length !== 2) {
     return client.replyMessage({
       replyToken: event.replyToken,
-      messages: [{ type: "text", text: "格式：項目 金額（例如 午餐 120）" }],
+      messages: [
+        {
+          type: "text",
+          text: "格式：項目 金額（例如 午餐 120）",
+        },
+      ],
     });
   }
 
   const item = parts[0];
   const amount = parts[1];
 
+  // 寫入 Sheet
   await addRow(item, amount);
 
+  // 回覆 LINE
   return client.replyMessage({
     replyToken: event.replyToken,
-    messages: [{ type: "text", text: `已記錄：${item} ${amount}` }],
+    messages: [
+      {
+        type: "text",
+        text: `已記錄：${item} ${amount}`,
+      },
+    ],
   });
 }
 
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Bot running");
+// Server start
+const port = process.env.PORT || 3000;
+
+app.listen(port, () => {
+  console.log("🚀 Bot running on port", port);
 });
