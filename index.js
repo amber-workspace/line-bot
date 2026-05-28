@@ -27,14 +27,21 @@ const SHEET_NAME = "工作表1";
 // 寫入 Sheet
 async function addRow(item, amount) {
   try {
+    console.log("👉 ADD ROW START");
+
     const doc = new GoogleSpreadsheet(SHEET_ID);
 
     await doc.useServiceAccountAuth({
       client_email: creds.client_email,
       private_key: creds.private_key,
     });
+console.log("👉 AUTH OK");
 
     await doc.loadInfo();
+
+     console.log("👉 SHEET LOADED");
+
+    
 
     const sheet = doc.sheetsByTitle[SHEET_NAME];
 
@@ -70,7 +77,7 @@ app.post("/callback", line.middleware(config), async (req, res) => {
 
 async function handleEvent(event) {
   console.log("LINE EVENT RECEIVED:", JSON.stringify(event));
-  
+
   if (event.type !== "message") return;
 
   if (!event.message || !event.message.text) return;
