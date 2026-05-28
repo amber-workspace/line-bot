@@ -67,6 +67,8 @@ app.post("/callback", line.middleware(config), async (req, res) => {
   }
 });
 
+console.log("LINE EVENT RECEIVED:", JSON.stringify(event));
+
 async function handleEvent(event) {
   if (event.type !== "message") return;
 
