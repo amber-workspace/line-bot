@@ -70,7 +70,9 @@ app.post("/callback", line.middleware(config), async (req, res) => {
 async function handleEvent(event) {
   if (event.type !== "message") return;
 
-  const text = event.message.text.trim();
+  if (!event.message || !event.message.text) return;
+
+  const text = event.message.text;
 
   const parts = text.split(" ");
 
@@ -80,28 +82,39 @@ async function handleEvent(event) {
       messages: [
         {
           type: "text",
-          text: "格式：項目 金額（例如 午餐 120）",
+          text: "格式：項目 金額（例如 午餐 100）",
         },
       ],
     });
   }
 
-  const item = parts[0];
-  const amount = parts[1];
+  const [item, amount] = parts;
 
-  // 寫入 Sheet
-  await addRow(item, amount);
+  try {
+    await addRow(item, amount);
 
-  // 回覆 LINE
-  return client.replyMessage({
-    replyToken: event.replyToken,
-    messages: [
-      {
-        type: "text",
-        text: `已記錄：${item} ${amount}`,
-      },
-    ],
-  });
+    return client.replyMessage({
+      replyToken: event.replyToken,
+      messages: [
+        {
+          type: "text",
+          text: `已記錄：${item} ${amount}`,
+        },
+      ],
+    });
+  } catch (err) {
+    console.error("addRow error:", err);
+
+    return client.replyMessage({
+      replyToken: event.replyToken,
+      messages: [
+        {
+          type: "text",
+          text: "記錄失敗（Google Sheet 授權問題）",
+        },
+      ],
+    });
+  }
 }
 
 // Server start
