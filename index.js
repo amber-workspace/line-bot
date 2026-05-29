@@ -432,9 +432,9 @@ async function deleteTodayRecords() {
     return row.日期 === today;
   });
 
-  // 刪除
-  for (const row of todayRows) {
-    await row.delete();
+  // ⭐ 倒著刪
+  for (let i = todayRows.length - 1; i >= 0; i--) {
+    await todayRows[i].delete();
   }
 
   return todayRows.length;
