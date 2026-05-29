@@ -47,7 +47,7 @@ async function addRow(item, amount) {
     const category = getCategory(item);
 
     await sheet.addRow({
-      日期: new Date().toLocaleString(),
+      日期: new Date().toISOString().split("T")[0],
       項目: item,
       金額: amount,
       類別: category,
@@ -82,6 +82,54 @@ async function handleEvent(event) {
   if (!event.replyToken) return;
 
   const text = event.message.text.trim();
+
+  if (text === "今天") {
+
+  const rows = await getTodayRecords();
+
+  if (rows.length === 0) {
+
+    await client.replyMessage(
+      event.replyToken,
+      [
+        {
+          type: "text",
+          text: "今天還沒有記帳資料",
+        },
+      ]
+    );
+
+    return;
+  }
+
+  let total = 0;
+
+  const messages = rows.map(row => {
+
+    total += Number(row.金額);
+
+    return `${row.項目} ${row.金額}（${row.類別}）`;
+  });
+
+  const result =
+`📒 今日支出
+
+${messages.join("\n")}
+
+💰 總計：${total} 元`;
+
+  await client.replyMessage(
+    event.replyToken,
+    [
+      {
+        type: "text",
+        text: result,
+      },
+    ]
+  );
+
+  return;
+}
 
   const parts = text.split(" ");
 
@@ -145,6 +193,30 @@ app.listen(port, () => {
   console.log("🚀 Bot running on port", port);
 });
 
+async function getTodayRecords() {
+
+  const doc = new GoogleSpreadsheet(SHEET_ID);
+
+  await doc.useServiceAccountAuth({
+    client_email: creds.client_email,
+    private_key: creds.private_key,
+  });
+
+  await doc.loadInfo();
+
+  const sheet = doc.sheetsByTitle[SHEET_NAME];
+
+  const rows = await sheet.getRows();
+
+  const today = new Date().toISOString().split("T")[0];
+
+  // 篩選今天資料
+  const todayRows = rows.filter(row => {
+    return row.日期.includes(today);
+  });
+
+  return todayRows;
+}
 
 function getCategory(item) {
 
