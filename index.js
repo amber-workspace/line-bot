@@ -243,7 +243,60 @@ async function handleEvent(event) {
     return;
   }
 
-  const parts = text.split(" ");
+  const lines = text.split("\n");
+
+  let successMessages = [];
+
+  for (const lineText of lines) {
+
+    const parts = lineText.trim().split(" ");
+
+    // 格式錯誤
+    if (parts.length !== 2) {
+      continue;
+    }
+
+    const [item, amount] = parts;
+
+    const category = getCategory(item);
+
+    await addRow(item, amount);
+
+    successMessages.push(
+      `${item} ${amount}（${category}）`
+    );
+  }
+
+  if (successMessages.length === 0) {
+
+    await client.replyMessage(
+      event.replyToken,
+      [
+        {
+          type: "text",
+          text: "格式錯誤\n例如：午餐 100",
+        },
+      ]
+    );
+
+    return;
+  }
+
+  await client.replyMessage(
+    event.replyToken,
+    [
+      {
+        type: "text",
+        text:
+  `已記錄：
+
+  ${successMessages.join("\n")}`,
+      },
+    ]
+  );
+
+  //單筆新增
+  /*const parts = text.split(" ");
 
   // 格式錯誤
   if (parts.length !== 2) {
@@ -295,7 +348,7 @@ async function handleEvent(event) {
         },
       ]
     );
-  }
+  }*/
 }
 
 // Server start
