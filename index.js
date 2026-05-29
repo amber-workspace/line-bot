@@ -103,6 +103,8 @@ async function handleEvent(event) {
 
   const [item, amount] = parts;
 
+  const category = getCategory(item);
+
   try {
 
     // 寫入 Google Sheet
