@@ -85,16 +85,45 @@ async function handleEvent(event) {
 
   if (text === "今天") {
 
-  const rows = await getTodayRecords();
+    const rows = await getTodayRecords();
 
-  if (rows.length === 0) {
+    if (rows.length === 0) {
+
+      await client.replyMessage(
+        event.replyToken,
+        [
+          {
+            type: "text",
+            text: "今天還沒有記帳資料",
+          },
+        ]
+      );
+
+      return;
+    }
+
+    let total = 0;
+
+    const messages = rows.map(row => {
+
+      total += Number(row.金額);
+
+      return `${row.項目} ${row.金額}（${row.類別}）`;
+    });
+
+    const result =
+  `📒 今日支出
+
+  ${messages.join("\n")}
+
+  💰 總計：${total} 元`;
 
     await client.replyMessage(
       event.replyToken,
       [
         {
           type: "text",
-          text: "今天還沒有記帳資料",
+          text: result,
         },
       ]
     );
@@ -102,34 +131,66 @@ async function handleEvent(event) {
     return;
   }
 
-  let total = 0;
+  if (text === "本月" || text === "當月") {
 
-  const messages = rows.map(row => {
+    const rows = await getMonthRecords();
 
-    total += Number(row.金額);
+    if (rows.length === 0) {
 
-    return `${row.項目} ${row.金額}（${row.類別}）`;
-  });
+      await client.replyMessage(
+        event.replyToken,
+        [
+          {
+            type: "text",
+            text: "本月還沒有記帳資料",
+          },
+        ]
+      );
 
-  const result =
-`📒 今日支出
+      return;
+    }
 
-${messages.join("\n")}
+    // 分類統計
+    const summary = {};
 
-💰 總計：${total} 元`;
+    let total = 0;
 
-  await client.replyMessage(
-    event.replyToken,
-    [
-      {
-        type: "text",
-        text: result,
-      },
-    ]
-  );
+    rows.forEach(row => {
 
-  return;
-}
+      const category = row.類別 || "其他";
+
+      const amount = Number(row.金額);
+
+      total += amount;
+
+      if (!summary[category]) {
+        summary[category] = 0;
+      }
+
+      summary[category] += amount;
+    });
+
+    // 組訊息
+    let result = "📊 本月支出統計\n\n";
+
+    for (const category in summary) {
+      result += `${category}：${summary[category]} 元\n`;
+    }
+
+    result += `\n💰 本月總計：${total} 元`;
+
+    await client.replyMessage(
+      event.replyToken,
+      [
+        {
+          type: "text",
+          text: result,
+        },
+      ]
+    );
+
+    return;
+  }
 
   const parts = text.split(" ");
 
@@ -193,6 +254,7 @@ app.listen(port, () => {
   console.log("🚀 Bot running on port", port);
 });
 
+// 今日統計
 async function getTodayRecords() {
 
   const doc = new GoogleSpreadsheet(SHEET_ID);
@@ -216,6 +278,33 @@ async function getTodayRecords() {
   });
 
   return todayRows;
+}
+
+//當月統計
+async function getMonthRecords() {
+
+  const doc = new GoogleSpreadsheet(SHEET_ID);
+
+  await doc.useServiceAccountAuth({
+    client_email: creds.client_email,
+    private_key: creds.private_key,
+  });
+
+  await doc.loadInfo();
+
+  const sheet = doc.sheetsByTitle[SHEET_NAME];
+
+  const rows = await sheet.getRows();
+
+  // 取得本月 yyyy-mm
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  // 篩選本月資料
+  const monthRows = rows.filter(row => {
+    return row.日期.startsWith(currentMonth);
+  });
+
+  return monthRows;
 }
 
 function getCategory(item) {
