@@ -83,6 +83,38 @@ async function handleEvent(event) {
 
   const text = event.message.text.trim();
 
+  if (text === "刪除") {
+
+    const deleted = await deleteLastRecord();
+
+    if (!deleted) {
+
+      await client.replyMessage(
+        event.replyToken,
+        [
+          {
+            type: "text",
+            text: "沒有資料可以刪除",
+          },
+        ]
+      );
+
+      return;
+    }
+
+    await client.replyMessage(
+      event.replyToken,
+      [
+        {
+          type: "text",
+          text: `已刪除：${deleted.item} ${deleted.amount}`,
+        },
+      ]
+    );
+
+    return;
+  }
+
   if (text === "今天") {
 
     const rows = await getTodayRecords();
@@ -253,6 +285,39 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log("🚀 Bot running on port", port);
 });
+
+//刪除
+async function deleteLastRecord() {
+
+  const doc = new GoogleSpreadsheet(SHEET_ID);
+
+  await doc.useServiceAccountAuth({
+    client_email: creds.client_email,
+    private_key: creds.private_key,
+  });
+
+  await doc.loadInfo();
+
+  const sheet = doc.sheetsByTitle[SHEET_NAME];
+
+  const rows = await sheet.getRows();
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  // 最後一筆
+  const lastRow = rows[rows.length - 1];
+
+  const deletedData = {
+    item: lastRow.項目,
+    amount: lastRow.金額,
+  };
+
+  await lastRow.delete();
+
+  return deletedData;
+}
 
 // 今日統計
 async function getTodayRecords() {
