@@ -116,6 +116,23 @@ async function handleEvent(event) {
     return;
   }
 
+  if (text === "刪除今天") {
+
+  const deletedCount = await deleteTodayRecords();
+
+  await client.replyMessage(
+    event.replyToken,
+    [
+      {
+        type: "text",
+        text: `已刪除今天 ${deletedCount} 筆資料`,
+      },
+    ]
+  );
+
+  return;
+}
+
   if (text === "今天") {
 
     const rows = await getTodayRecords();
@@ -145,7 +162,7 @@ async function handleEvent(event) {
     });
 
     const result =
-  `📒 今日支出
+  `📒 今天支出
 
   ${messages.join("\n")}
 
@@ -358,7 +375,7 @@ app.listen(port, () => {
   console.log("🚀 Bot running on port", port);
 });
 
-//刪除
+//刪除最新1筆資料
 async function deleteLastRecord() {
 
   const doc = new GoogleSpreadsheet(SHEET_ID);
@@ -389,6 +406,38 @@ async function deleteLastRecord() {
   await lastRow.delete();
 
   return deletedData;
+}
+
+//刪除今日資料
+async function deleteTodayRecords() {
+
+  const doc = new GoogleSpreadsheet(SHEET_ID);
+
+  await doc.useServiceAccountAuth({
+    client_email: creds.client_email,
+    private_key: creds.private_key,
+  });
+
+  await doc.loadInfo();
+
+  const sheet = doc.sheetsByTitle[SHEET_NAME];
+
+  const rows = await sheet.getRows();
+
+  // 今天日期
+  const today = new Date().toISOString().split("T")[0];
+
+  // 找今天資料
+  const todayRows = rows.filter(row => {
+    return row.日期 === today;
+  });
+
+  // 刪除
+  for (const row of todayRows) {
+    await row.delete();
+  }
+
+  return todayRows.length;
 }
 
 // 今日統計
