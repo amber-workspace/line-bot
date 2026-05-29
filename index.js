@@ -44,10 +44,13 @@ async function addRow(item, amount) {
       return;
     }
 
+    const category = getCategory(item);
+
     await sheet.addRow({
       日期: new Date().toLocaleString(),
       項目: item,
       金額: amount,
+      類別: category,
     });
 
     console.log("✔ 已寫入 Google Sheet");
@@ -111,7 +114,7 @@ async function handleEvent(event) {
       [
         {
           type: "text",
-          text: `已記錄：${item} ${amount}`,
+          text: `已記錄：${item} ${amount}（${category}）`,
         },
       ]
     );
@@ -139,3 +142,21 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log("🚀 Bot running on port", port);
 });
+
+
+function getCategory(item) {
+
+  if (item.includes("午餐") || item.includes("晚餐") || item.includes("早餐")) {
+    return "餐飲";
+  }
+
+  if (item.includes("咖啡") || item.includes("飲料")) {
+    return "飲料";
+  }
+
+  if (item.includes("捷運") || item.includes("公車") || item.includes("計程車")) {
+    return "交通";
+  }
+
+  return "其他";
+}
