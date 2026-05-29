@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const line = require("@line/bot-sdk");
 const { GoogleSpreadsheet } = require("google-spreadsheet");
+const axios = require("axios");
 
 const app = express();
 
@@ -224,6 +225,24 @@ async function handleEvent(event) {
     return;
   }
 
+  if (text === "圖表") {
+
+    const chartUrl = await generatePieChart();
+
+    await client.replyMessage(
+      event.replyToken,
+      [
+        {
+          type: "image",
+          originalContentUrl: chartUrl,
+          previewImageUrl: chartUrl,
+        },
+      ]
+    );
+
+    return;
+  }
+
   const parts = text.split(" ");
 
   // 格式錯誤
@@ -371,6 +390,50 @@ async function getMonthRecords() {
 
   return monthRows;
 }
+
+//圖表
+async function generatePieChart() {
+
+  const rows = await getMonthRecords();
+
+  const summary = {};
+
+  rows.forEach(row => {
+
+    const category = row.類別 || "其他";
+
+    const amount = Number(row.金額);
+
+    if (!summary[category]) {
+      summary[category] = 0;
+    }
+
+    summary[category] += amount;
+  });
+
+  const labels = Object.keys(summary);
+
+  const data = Object.values(summary);
+
+  const chartConfig = {
+    type: "pie",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          data: data,
+        },
+      ],
+    },
+  };
+
+  const chartUrl =
+    "https://quickchart.io/chart?c=" +
+    encodeURIComponent(JSON.stringify(chartConfig));
+
+  return chartUrl;
+}
+
 
 function getCategory(item) {
 
