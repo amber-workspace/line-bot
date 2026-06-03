@@ -2,7 +2,8 @@ require("dotenv").config();
 
 const express = require("express");
 const line = require("@line/bot-sdk");
-const { GoogleSpreadsheet } = require("google-spreadsheet");
+//const { GoogleSpreadsheet } = require("google-spreadsheet");
+const db = require("./db");
 const axios = require("axios");
 
 const app = express();
@@ -15,50 +16,78 @@ const config = {
 
 const client = new line.Client(config);
 
-// Google Credentials
-const creds = {
-  client_email: process.env.GOOGLE_CLIENT_EMAIL,
-  private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-};
 
-// Google Sheet
-const SHEET_ID = "1GuaCuT9iu7K3fHO89MyaBHXfB7hTesYQBp_F-_L9img";
-const SHEET_NAME = "工作表1";
+function addRow(lineUserId, item, amount) {
+
+  const category = getCategory(item);
+
+  const stmt = db.prepare(`
+    INSERT INTO records
+    (
+      lineUserId,
+      date,
+      item,
+      amount,
+      category
+    )
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  stmt.run(
+    lineUserId,
+    new Date().toISOString().split("T")[0],
+    item,
+    amount,
+    category
+  );
+
+  console.log("✔ 已寫入 SQLite");
+}
+
+// Google Credentials
+// const creds = {
+//   client_email: process.env.GOOGLE_CLIENT_EMAIL,
+//   private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+// };
+
+// // Google Sheet
+// const SHEET_ID = "1GuaCuT9iu7K3fHO89MyaBHXfB7hTesYQBp_F-_L9img";
+// const SHEET_NAME = "工作表1";
 
 // 寫入 Sheet
-async function addRow(item, amount) {
-  try {
+// async function addRow(item, amount) {
+//   try {
 
-    const doc = new GoogleSpreadsheet(SHEET_ID);
+//     const doc = new GoogleSpreadsheet(SHEET_ID);
 
-    await doc.useServiceAccountAuth({
-      client_email: creds.client_email,
-      private_key: creds.private_key,
-    });
+//     await doc.useServiceAccountAuth({
+//       client_email: creds.client_email,
+//       private_key: creds.private_key,
+//     });
 
-    await doc.loadInfo();
+//     await doc.loadInfo();
 
-    const sheet = doc.sheetsByTitle[SHEET_NAME];
+//     const sheet = doc.sheetsByTitle[SHEET_NAME];
 
-    if (!sheet) {
-      console.log("Sheet not found:", SHEET_NAME);
-      return;
-    }
+//     if (!sheet) {
+//       console.log("Sheet not found:", SHEET_NAME);
+//       return;
+//     }
 
-    const category = getCategory(item);
+//     const category = getCategory(item);
 
-    await sheet.addRow({
-      日期: new Date().toISOString().split("T")[0],
-      項目: item,
-      金額: amount,
-      類別: category,
-    });
+//     await sheet.addRow({
+//       日期: new Date().toISOString().split("T")[0],
+//       項目: item,
+//       金額: amount,
+//       類別: category,
+//     });
 
-    console.log("✔ 已寫入 Google Sheet");
-  } catch (err) {
-    console.error("❌ addRow error:", err);
-  }
-}
+//     console.log("✔ 已寫入 Google Sheet");
+//   } catch (err) {
+//     console.error("❌ addRow error:", err);
+//   }
+// }
 
 // LINE webhook
 app.post("/callback", line.middleware(config), async (req, res) => {
@@ -82,6 +111,7 @@ async function handleEvent(event) {
 
   if (!event.replyToken) return;
 
+  const lineUserId = event.source.userId;
   const text = event.message.text.trim();
 
   if (text === "刪除") {
@@ -135,7 +165,8 @@ async function handleEvent(event) {
 
   if (text === "今天") {
 
-    const rows = await getTodayRecords();
+    //const rows = await getTodayRecords();
+    const rows = getTodayRecords(lineUserId);
 
     if (rows.length === 0) {
 
@@ -156,9 +187,9 @@ async function handleEvent(event) {
 
     const messages = rows.map(row => {
 
-      total += Number(row.金額);
+      total += Number(row.amount);
 
-      return `${row.項目} ${row.金額}（${row.類別}）`;
+      return `${row.item} ${row.amount}（${row.category}）`;
     });
 
     const result =
@@ -277,7 +308,8 @@ async function handleEvent(event) {
 
     const category = getCategory(item);
 
-    await addRow(item, amount);
+    //await addRow(item, amount);
+    addRow(lineUserId, item, amount);
 
     successMessages.push(
       `${item} ${amount}（${category}）`
@@ -440,31 +472,47 @@ async function deleteTodayRecords() {
   return todayRows.length;
 }
 
-// 今日統計
-async function getTodayRecords() {
-
-  const doc = new GoogleSpreadsheet(SHEET_ID);
-
-  await doc.useServiceAccountAuth({
-    client_email: creds.client_email,
-    private_key: creds.private_key,
-  });
-
-  await doc.loadInfo();
-
-  const sheet = doc.sheetsByTitle[SHEET_NAME];
-
-  const rows = await sheet.getRows();
+// 今日統計 DB
+function getTodayRecords(lineUserId) {
 
   const today = new Date().toISOString().split("T")[0];
 
-  // 篩選今天資料
-  const todayRows = rows.filter(row => {
-    return row.日期.includes(today);
-  });
+  const stmt = db.prepare(`
+    SELECT *
+    FROM records
+    WHERE lineUserId = ?
+    AND date = ?
+    ORDER BY id DESC
+  `);
 
-  return todayRows;
+  return stmt.all(lineUserId, today);
 }
+
+// 今日統計 Google Sheet
+// async function getTodayRecords() {
+
+//   const doc = new GoogleSpreadsheet(SHEET_ID);
+
+//   await doc.useServiceAccountAuth({
+//     client_email: creds.client_email,
+//     private_key: creds.private_key,
+//   });
+
+//   await doc.loadInfo();
+
+//   const sheet = doc.sheetsByTitle[SHEET_NAME];
+
+//   const rows = await sheet.getRows();
+
+//   const today = new Date().toISOString().split("T")[0];
+
+//   // 篩選今天資料
+//   const todayRows = rows.filter(row => {
+//     return row.日期.includes(today);
+//   });
+
+//   return todayRows;
+// }
 
 //當月統計
 async function getMonthRecords() {
