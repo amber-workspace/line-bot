@@ -155,12 +155,13 @@ async function handleEvent(event) {
       return `${row.item} ${row.amount}（${row.category}）`;
     });
 
-    const result =
-  `📒 今天支出
-
-  ${messages.join("\n")}
-
-  💰 總計：${total} 元`;
+    const result = [
+      "📒 今天支出",
+      "",
+      ...messages,
+      "",
+      `💰 總計：${total} 元`
+    ].join("\n");
 
     await client.replyMessage(
       event.replyToken,
