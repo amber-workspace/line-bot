@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node index.js"
   },
+  
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -16,5 +17,8 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "google-spreadsheet": "^3.3.0"
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
