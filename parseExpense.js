@@ -29,6 +29,12 @@ function parseExpense(text) {
     };
   }
 
+  // 4️⃣ 100午餐
+  match = clean.match(/^(\d+)(.+)$/);
+  if (match) {
+    return { item: match[2], amount: Number(match[1]) };
+  }
+
   return null;
 }
 

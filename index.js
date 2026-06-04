@@ -78,7 +78,7 @@ async function handleEvent(event) {
   const lineUserId = event.source.userId;
   const text = event.message.text.trim();
 
-  if (text === "刪除" || text === "撤銷") {
+  if (text === "刪除" || text === "撤銷" || text === "撤回") {
 
     const deleted = deleteLastRecord(lineUserId);
 
@@ -177,7 +177,7 @@ async function handleEvent(event) {
     return;
   }
 
-  if (text === "本月" || text === "當月") {
+  if (text === "本月" || text === "當月" || text === "這個月") {
 
     const rows = getMonthRecords(lineUserId);
 
@@ -420,7 +420,7 @@ function getTodayRecords(lineUserId) {
     FROM records
     WHERE lineUserId = ?
     AND date = ?
-    ORDER BY id DESC
+    ORDER BY id ASC
   `);
 
   return stmt.all(lineUserId, today);
@@ -436,7 +436,7 @@ function getMonthRecords(lineUserId) {
     FROM records
     WHERE lineUserId = ?
     AND substr(date, 1, 7) = ?
-    ORDER BY id DESC
+    ORDER BY id ASC
   `);
 
   return stmt.all(lineUserId, currentMonth);
