@@ -5,6 +5,7 @@ const line = require("@line/bot-sdk");
 //const { GoogleSpreadsheet } = require("google-spreadsheet");
 const db = require("./db");
 const axios = require("axios");
+const parseExpense = require("./parseExpense");
 
 const app = express();
 
@@ -77,7 +78,7 @@ async function handleEvent(event) {
   const lineUserId = event.source.userId;
   const text = event.message.text.trim();
 
-  if (text === "刪除") {
+  if (text === "刪除" || text === "撤銷") {
 
     const deleted = deleteLastRecord(lineUserId);
 
@@ -126,7 +127,7 @@ async function handleEvent(event) {
   return;
 }
 
-  if (text === "今天") {
+  if (text === "今天" || text === "今天明細") {
 
     //const rows = await getTodayRecords();
     const rows = getTodayRecords(lineUserId);
@@ -296,20 +297,18 @@ async function handleEvent(event) {
 
   for (const lineText of lines) {
 
-    const parts = lineText.trim().split(" ");
+    const parsed = parseExpense(lineText);
 
-    // 格式錯誤
-    if (parts.length !== 2) {
+    if (!parsed) {
       continue;
     }
 
-    const [item, amountText] = parts; 
-    const amount = Number(amountText); 
-    if (isNaN(amount) || amount <= 0) { continue; }
+    const { item, amount } = parsed;
+    
+    if (!amount || amount <= 0) continue;
 
     const category = getCategory(item);
 
-    //await addRow(item, amount);
     addRow(lineUserId, item, amount);
 
     successMessages.push(
@@ -332,15 +331,18 @@ async function handleEvent(event) {
     return;
   }
 
+  const result = [
+      "📒 已記錄：",
+      "",
+      ...successMessages
+    ].join("\n");
+
   await client.replyMessage(
     event.replyToken,
     [
       {
         type: "text",
-        text:
-  `已記錄：
-
-  ${successMessages.join("\n")}`,
+        text: result,
       },
     ]
   );
