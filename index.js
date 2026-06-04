@@ -18,76 +18,38 @@ const client = new line.Client(config);
 
 
 function addRow(lineUserId, item, amount) {
+  try {
 
-  const category = getCategory(item);
+    const category = getCategory(item);
 
-  const stmt = db.prepare(`
-    INSERT INTO records
-    (
+    const stmt = db.prepare(`
+      INSERT INTO records
+      (
+        lineUserId,
+        date,
+        item,
+        amount,
+        category
+      )
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
       lineUserId,
-      date,
+      new Date().toISOString().split("T")[0],
       item,
       amount,
       category
-    )
-    VALUES (?, ?, ?, ?, ?)
-  `);
+    );
 
-  stmt.run(
-    lineUserId,
-    new Date().toISOString().split("T")[0],
-    item,
-    amount,
-    category
-  );
+    console.log("✔ 已寫入 SQLite");
 
-  console.log("✔ 已寫入 SQLite");
+  } catch (err) { 
+    console.error("❌ addRow error:", err); 
+  }
 }
 
-// Google Credentials
-// const creds = {
-//   client_email: process.env.GOOGLE_CLIENT_EMAIL,
-//   private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-// };
-
-// // Google Sheet
-// const SHEET_ID = "1GuaCuT9iu7K3fHO89MyaBHXfB7hTesYQBp_F-_L9img";
-// const SHEET_NAME = "工作表1";
-
-// 寫入 Sheet
-// async function addRow(item, amount) {
-//   try {
-
-//     const doc = new GoogleSpreadsheet(SHEET_ID);
-
-//     await doc.useServiceAccountAuth({
-//       client_email: creds.client_email,
-//       private_key: creds.private_key,
-//     });
-
-//     await doc.loadInfo();
-
-//     const sheet = doc.sheetsByTitle[SHEET_NAME];
-
-//     if (!sheet) {
-//       console.log("Sheet not found:", SHEET_NAME);
-//       return;
-//     }
-
-//     const category = getCategory(item);
-
-//     await sheet.addRow({
-//       日期: new Date().toISOString().split("T")[0],
-//       項目: item,
-//       金額: amount,
-//       類別: category,
-//     });
-
-//     console.log("✔ 已寫入 Google Sheet");
-//   } catch (err) {
-//     console.error("❌ addRow error:", err);
-//   }
-// }
+app.get("/", (req, res) => { res.send("LINE Bot is running"); });
 
 // LINE webhook
 app.post("/callback", line.middleware(config), async (req, res) => {
@@ -110,13 +72,14 @@ async function handleEvent(event) {
   if (!event.message || !event.message.text) return;
 
   if (!event.replyToken) return;
+  if (!event.source || !event.source.userId) return;
 
   const lineUserId = event.source.userId;
   const text = event.message.text.trim();
 
   if (text === "刪除") {
 
-    const deleted = await deleteLastRecord();
+    const deleted = deleteLastRecord(lineUserId);
 
     if (!deleted) {
 
@@ -148,7 +111,7 @@ async function handleEvent(event) {
 
   if (text === "刪除今天") {
 
-  const deletedCount = await deleteTodayRecords();
+  const deletedCount = deleteTodayRecords(lineUserId);
 
   await client.replyMessage(
     event.replyToken,
@@ -214,7 +177,7 @@ async function handleEvent(event) {
 
   if (text === "本月" || text === "當月") {
 
-    const rows = await getMonthRecords();
+    const rows = getMonthRecords(lineUserId);
 
     if (rows.length === 0) {
 
@@ -238,9 +201,9 @@ async function handleEvent(event) {
 
     rows.forEach(row => {
 
-      const category = row.類別 || "其他";
+      const category = row.category || "其他";
 
-      const amount = Number(row.金額);
+      const amount = Number(row.amount);
 
       total += amount;
 
@@ -273,9 +236,44 @@ async function handleEvent(event) {
     return;
   }
 
+  if (text === "排行") {
+
+    const rows = getCategoryRanking(lineUserId);
+
+    if (rows.length === 0) {
+      await client.replyMessage(event.replyToken, [
+        {
+          type: "text",
+          text: "本月還沒有資料"
+        }
+      ]);
+      return;
+    }
+
+    const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+
+    let result = "📊 本月支出排行\n\n";
+
+    rows.forEach((row, index) => {
+
+      const medal = medals[index] || `${index + 1}️⃣`;
+
+      result += `${medal} ${row.category}：${row.total} 元\n`;
+    });
+
+    await client.replyMessage(event.replyToken, [
+      {
+        type: "text",
+        text: result
+      }
+    ]);
+
+    return;
+  }
+
   if (text === "圖表") {
 
-    const chartUrl = await generatePieChart();
+    const chartUrl = generatePieChart(lineUserId);
 
     await client.replyMessage(
       event.replyToken,
@@ -304,7 +302,9 @@ async function handleEvent(event) {
       continue;
     }
 
-    const [item, amount] = parts;
+    const [item, amountText] = parts; 
+    const amount = Number(amountText); 
+    if (isNaN(amount) || amount <= 0) { continue; }
 
     const category = getCategory(item);
 
@@ -344,60 +344,6 @@ async function handleEvent(event) {
     ]
   );
 
-  //單筆新增
-  /*const parts = text.split(" ");
-
-  // 格式錯誤
-  if (parts.length !== 2) {
-
-    await client.replyMessage(
-      event.replyToken,
-      [
-        {
-          type: "text",
-          text: "格式：項目 金額（例如 午餐 100）",
-        },
-      ]
-    );
-
-    return;
-  }
-
-  const [item, amount] = parts;
-
-  const category = getCategory(item);
-
-  try {
-
-    // 寫入 Google Sheet
-    await addRow(item, amount);
-
-    // 回覆成功訊息
-    await client.replyMessage(
-      event.replyToken,
-      [
-        {
-          type: "text",
-          text: `已記錄：${item} ${amount}（${category}）`,
-        },
-      ]
-    );
-
-  } catch (err) {
-
-    console.error("❌ handleEvent error:", err);
-
-    // 回覆失敗訊息
-    await client.replyMessage(
-      event.replyToken,
-      [
-        {
-          type: "text",
-          text: "記錄失敗，請稍後再試",
-        },
-      ]
-    );
-  }*/
 }
 
 // Server start
@@ -407,70 +353,59 @@ app.listen(port, () => {
   console.log("🚀 Bot running on port", port);
 });
 
-//刪除最新1筆資料
-async function deleteLastRecord() {
+// 刪除最新一筆
+function deleteLastRecord(lineUserId) {
 
-  const doc = new GoogleSpreadsheet(SHEET_ID);
+  // 找最後一筆
+  const stmt = db.prepare(`
+    SELECT *
+    FROM records
+    WHERE lineUserId = ?
+    ORDER BY id DESC
+    LIMIT 1
+  `);
 
-  await doc.useServiceAccountAuth({
-    client_email: creds.client_email,
-    private_key: creds.private_key,
-  });
+  const row = stmt.get(lineUserId);
 
-  await doc.loadInfo();
-
-  const sheet = doc.sheetsByTitle[SHEET_NAME];
-
-  const rows = await sheet.getRows();
-
-  if (rows.length === 0) {
+  if (!row) {
     return null;
   }
 
-  // 最後一筆
-  const lastRow = rows[rows.length - 1];
+  // 刪除
+  db.prepare(`
+    DELETE FROM records
+    WHERE id = ?
+  `).run(row.id);
 
-  const deletedData = {
-    item: lastRow.項目,
-    amount: lastRow.金額,
-  };
-
-  await lastRow.delete();
-
-  return deletedData;
+  return row;
 }
 
-//刪除今日資料
-async function deleteTodayRecords() {
 
-  const doc = new GoogleSpreadsheet(SHEET_ID);
+// 刪除今天資料
+function deleteTodayRecords(lineUserId) {
 
-  await doc.useServiceAccountAuth({
-    client_email: creds.client_email,
-    private_key: creds.private_key,
-  });
-
-  await doc.loadInfo();
-
-  const sheet = doc.sheetsByTitle[SHEET_NAME];
-
-  const rows = await sheet.getRows();
-
-  // 今天日期
   const today = new Date().toISOString().split("T")[0];
 
-  // 找今天資料
-  const todayRows = rows.filter(row => {
-    return row.日期 === today;
-  });
+  // 先查今天有幾筆
+  const countStmt = db.prepare(`
+    SELECT COUNT(*) as count
+    FROM records
+    WHERE lineUserId = ?
+    AND date = ?
+  `);
 
-  // ⭐ 倒著刪
-  for (let i = todayRows.length - 1; i >= 0; i--) {
-    await todayRows[i].delete();
-  }
+  const result = countStmt.get(lineUserId, today);
 
-  return todayRows.length;
+  // 刪除今天資料
+  db.prepare(`
+    DELETE FROM records
+    WHERE lineUserId = ?
+    AND date = ?
+  `).run(lineUserId, today);
+
+  return result.count;
 }
+
 
 // 今日統計 DB
 function getTodayRecords(lineUserId) {
@@ -488,71 +423,54 @@ function getTodayRecords(lineUserId) {
   return stmt.all(lineUserId, today);
 }
 
-// 今日統計 Google Sheet
-// async function getTodayRecords() {
+// 本月統計
+function getMonthRecords(lineUserId) {
 
-//   const doc = new GoogleSpreadsheet(SHEET_ID);
-
-//   await doc.useServiceAccountAuth({
-//     client_email: creds.client_email,
-//     private_key: creds.private_key,
-//   });
-
-//   await doc.loadInfo();
-
-//   const sheet = doc.sheetsByTitle[SHEET_NAME];
-
-//   const rows = await sheet.getRows();
-
-//   const today = new Date().toISOString().split("T")[0];
-
-//   // 篩選今天資料
-//   const todayRows = rows.filter(row => {
-//     return row.日期.includes(today);
-//   });
-
-//   return todayRows;
-// }
-
-//當月統計
-async function getMonthRecords() {
-
-  const doc = new GoogleSpreadsheet(SHEET_ID);
-
-  await doc.useServiceAccountAuth({
-    client_email: creds.client_email,
-    private_key: creds.private_key,
-  });
-
-  await doc.loadInfo();
-
-  const sheet = doc.sheetsByTitle[SHEET_NAME];
-
-  const rows = await sheet.getRows();
-
-  // 取得本月 yyyy-mm
   const currentMonth = new Date().toISOString().slice(0, 7);
 
-  // 篩選本月資料
-  const monthRows = rows.filter(row => {
-    return row.日期.startsWith(currentMonth);
-  });
+  const stmt = db.prepare(`
+    SELECT *
+    FROM records
+    WHERE lineUserId = ?
+    AND substr(date, 1, 7) = ?
+    ORDER BY id DESC
+  `);
 
-  return monthRows;
+  return stmt.all(lineUserId, currentMonth);
 }
 
-//圖表
-async function generatePieChart() {
+// 排行
+function getCategoryRanking(lineUserId) {
 
-  const rows = await getMonthRecords();
+  const currentMonth = new Date().toISOString().slice(0, 7);
+
+  const stmt = db.prepare(`
+    SELECT 
+      category,
+      SUM(amount) as total
+    FROM records
+    WHERE lineUserId = ?
+      AND substr(date, 1, 7) = ?
+    GROUP BY category
+    ORDER BY total DESC
+  `);
+
+  return stmt.all(lineUserId, currentMonth);
+}
+
+
+//圖表
+function generatePieChart(lineUserId) {
+
+  const rows = getMonthRecords(lineUserId);
 
   const summary = {};
 
   rows.forEach(row => {
 
-    const category = row.類別 || "其他";
+    const category = row.category || "其他";
 
-    const amount = Number(row.金額);
+    const amount = Number(row.amount);
 
     if (!summary[category]) {
       summary[category] = 0;
@@ -587,7 +505,7 @@ async function generatePieChart() {
 
 function getCategory(item) {
 
-  if (item.includes("午餐") || item.includes("晚餐") || item.includes("早餐")) {
+  if (item.includes("午餐") || item.includes("晚餐") || item.includes("早餐") || item.includes("點心")) {
     return "餐飲";
   }
 
