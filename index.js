@@ -36,7 +36,7 @@ function addRow(lineUserId, item, amount) {
 
     stmt.run(
       lineUserId,
-      new Date().toISOString().split("T")[0],
+      new Date().toLocaleDateString("sv-SE"),
       item,
       amount,
       category
@@ -82,7 +82,7 @@ async function handleEvent(event) {
     const commands = {
       TODAY: ["今天", "今日", "今日支出"],
       MONTH: ["本月", "當月", "本月統計"],
-      RANK: ["排行", "分類排行"],
+      RANK: ["排行", "類別排行"],
       CHART: ["圖表", "支出圖表"],
       HELP: ["說明", "help"],
       UNDO: ["刪除", "撤銷", "撤回", "撤銷上一筆"]
@@ -281,11 +281,16 @@ async function handleEvent(event) {
   } catch (err) {
 
     console.error("❌ handleEvent error:", err);
-    
-    await client.replyMessage(
-      event.replyToken,
-      createErrorFlex("系統忙碌中，請稍後再試")
-    );
+
+    try {
+      await client.replyMessage(
+        event.replyToken,
+        createErrorFlex("系統忙碌中，請稍後再試")
+      );
+    } catch (replyErr) {
+      console.error("❌ reply error:", replyErr);
+    }
+
   }
 
 }
@@ -328,7 +333,7 @@ function deleteLastRecord(lineUserId) {
 // 刪除今天資料
 function deleteTodayRecords(lineUserId) {
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("sv-SE");
 
   // 先查今天有幾筆
   const countStmt = db.prepare(`
@@ -354,7 +359,7 @@ function deleteTodayRecords(lineUserId) {
 // 今日統計 DB
 function getTodayRecords(lineUserId) {
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString("sv-SE");
 
   const stmt = db.prepare(`
     SELECT *
@@ -370,7 +375,7 @@ function getTodayRecords(lineUserId) {
 // 本月統計
 function getMonthRecords(lineUserId) {
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = new Date().toLocaleDateString("sv-SE").slice(0, 7);
 
   const stmt = db.prepare(`
     SELECT *
@@ -386,7 +391,7 @@ function getMonthRecords(lineUserId) {
 // 排行
 function getCategoryRanking(lineUserId) {
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = new Date().toLocaleDateString("sv-SE").slice(0, 7);
 
   const stmt = db.prepare(`
     SELECT 
@@ -519,7 +524,9 @@ function createRecordSuccessFlex(records) {
         {
           type: "text",
           text: record.item,
-          flex: 3
+          flex: 4,
+          wrap: true,
+          size: "sm"
         },
         {
           type: "text",
@@ -562,7 +569,8 @@ function createTodayFlex(rows, total) {
       {
         type: "text",
         text: row.item,
-        flex: 3,
+        flex: 4,
+        wrap: true,
         size: "sm"
       },
       {
@@ -668,11 +676,6 @@ function createMonthFlex(summary, total) {
         layout: "vertical",
         contents: [
 
-          {
-            type: "separator",
-            margin: "lg"
-          },
-
           ...contents,
 
           {
@@ -724,7 +727,7 @@ function createRankFlex(rows) {
     contents: [
       {
         type: "text",
-        text: medals[index] || `${index + 1}`,
+        text: medals[index] || `${index + 1}.`,
         flex: 1
       },
       {
@@ -816,7 +819,7 @@ function createDeleteTodayFlex(count) {
           {
             type: "text",
             text: `${count}`,
-            size: "xxl",
+            size: "3xl",
             weight: "bold",
             color: "#E74C3C",
             align: "center"
