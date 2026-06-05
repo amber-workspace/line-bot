@@ -65,20 +65,6 @@ app.post("/callback", line.middleware(config), async (req, res) => {
   }
 });
 
-
-async function replyText(replyToken, text) {
-
-  await client.replyMessage(
-    replyToken,
-    [
-      {
-        type: "text",
-        text: text,
-      },
-    ]
-  );
-}
-
 async function handleEvent(event) {
 
   try {
@@ -107,8 +93,6 @@ async function handleEvent(event) {
       const deleted = deleteLastRecord(lineUserId);
 
       if (!deleted) {
-
-        // await replyText(event.replyToken, "沒有資料可以刪除");
         await client.replyMessage(
           event.replyToken,
           createErrorFlex("沒有資料可以刪除")
@@ -116,7 +100,6 @@ async function handleEvent(event) {
         return;
       }
 
-      // await replyText(event.replyToken, `已刪除：${deleted.item} ${deleted.amount}`);
       await client.replyMessage(
         event.replyToken,
         createDeleteFlex(
@@ -131,7 +114,6 @@ async function handleEvent(event) {
 
       const deletedCount = deleteTodayRecords(lineUserId);
 
-      // await replyText(event.replyToken, `已刪除今天 ${deletedCount} 筆資料`);
       await client.replyMessage(
           event.replyToken,
           createDeleteTodayFlex(deletedCount)
@@ -145,8 +127,6 @@ async function handleEvent(event) {
       const rows = getTodayRecords(lineUserId);
 
       if (rows.length === 0) {
-
-        // await replyText(event.replyToken, "今天還沒有記帳資料");
         await client.replyMessage(
           event.replyToken,
           createErrorFlex("今天還沒有記帳資料")
@@ -154,24 +134,11 @@ async function handleEvent(event) {
         return;
       }
 
-      let total = 0;
+      const total = rows.reduce(
+        (sum, row) => sum + Number(row.amount),
+        0
+      );
 
-      // const messages = rows.map(row => {
-
-      //   total += Number(row.amount);
-
-      //   return `${row.item} ${row.amount}（${row.category}）`;
-      // });
-
-      // const result = [
-      //   "📒 今日支出",
-      //   "",
-      //   ...messages,
-      //   "",
-      //   `💰 總計：${total} 元`
-      // ].join("\n");
-
-      // await replyText(event.replyToken, result);
       await client.replyMessage(
         event.replyToken,
         createTodayFlex(rows, total)
@@ -185,8 +152,6 @@ async function handleEvent(event) {
       const rows = getMonthRecords(lineUserId);
 
       if (rows.length === 0) {
-
-        // await replyText(event.replyToken, "本月還沒有記帳資料");
         await client.replyMessage(
           event.replyToken,
           createErrorFlex("本月還沒有記帳資料")
@@ -214,17 +179,6 @@ async function handleEvent(event) {
         summary[category] += amount;
       });
 
-      // 組訊息
-      // let result = "📊 本月支出統計\n\n";
-
-      // for (const category in summary) {
-      //   result += `${category}：${summary[category]} 元\n`;
-      // }
-
-      // result += `\n💰 本月總計：${total} 元`;
-
-      // await replyText(event.replyToken, result);
-
       const flexMessage = createMonthFlex(summary, total); 
       await client.replyMessage( event.replyToken, flexMessage );
 
@@ -236,7 +190,6 @@ async function handleEvent(event) {
       const rows = getCategoryRanking(lineUserId);
 
       if (rows.length === 0) {
-        // await replyText(event.replyToken, "本月還沒有資料");
         await client.replyMessage(
           event.replyToken,
           createErrorFlex("本月還沒有資料")
@@ -244,18 +197,6 @@ async function handleEvent(event) {
         return;
       }
 
-      // const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
-
-      // let result = "📊 本月支出排行\n\n";
-
-      // rows.forEach((row, index) => {
-
-      //   const medal = medals[index] || `${index + 1}️⃣`;
-
-      //   result += `${medal} ${row.category}：${row.total} 元\n`;
-      // });
-
-      // await replyText(event.replyToken, result);
       await client.replyMessage(
         event.replyToken,
         createRankFlex(rows)
@@ -281,13 +222,7 @@ async function handleEvent(event) {
       return;
     }
 
-    if (commands.HELP.includes(text)) {
-
-      // await replyText(
-      //   event.replyToken,
-      //   getHelpMessage()
-      // );
-
+    if (commands.HELP.includes(text)) {  
       await client.replyMessage(
         event.replyToken,
         createHelpFlex()
@@ -331,18 +266,6 @@ async function handleEvent(event) {
     }
 
     if (successMessages.length === 0) {
-
-      // const helpMessage = [
-      //   "❌ 無法辨識輸入內容",
-      //   "",
-      //   "請輸入：",
-      //   "午餐 100",
-      //   "",
-      //   "或輸入以下功能：",
-      //   "今天 / 本月 / 排行 / 圖表 / 撤銷"
-      // ].join("\n");
-
-      // await replyText(event.replyToken, helpMessage);
       await client.replyMessage(
         event.replyToken,
         createInputErrorFlex()
@@ -350,13 +273,6 @@ async function handleEvent(event) {
       return;
     }
 
-    // const result = [
-    //     "📒 已記錄：",
-    //     "",
-    //     ...successMessages
-    //   ].join("\n");
-
-    // await replyText(event.replyToken, result);
     await client.replyMessage(
       event.replyToken,
       createRecordSuccessFlex(successMessages)
@@ -365,13 +281,8 @@ async function handleEvent(event) {
   } catch (err) {
 
     console.error("❌ handleEvent error:", err);
-
-    // await replyText(
-    //   event.replyToken,
-    //   "系統忙碌中，請稍後再試"
-    // );
-
-    await replyFlex(
+    
+    await client.replyMessage(
       event.replyToken,
       createErrorFlex("系統忙碌中，請稍後再試")
     );
@@ -595,7 +506,7 @@ function createHeader(title, color = "#27ACB2") {
 
 function createRecordSuccessFlex(records) {
 
-  const rows = records.map(item => ({
+  const rows = records.map(record => ({
     type: "box",
     layout: "horizontal",
     margin: "md",
@@ -905,7 +816,7 @@ function createDeleteTodayFlex(count) {
           {
             type: "text",
             text: `${count}`,
-            size: "4xl",
+            size: "xxl",
             weight: "bold",
             color: "#E74C3C",
             align: "center"
