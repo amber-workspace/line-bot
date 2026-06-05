@@ -93,7 +93,6 @@ async function handleEvent(event) {
     const lineUserId = event.source.userId;
     const text = event.message.text.trim();
 
-    const undoCommands = ["刪除","撤銷","撤回","撤銷上一筆"];
     const commands = {
       TODAY: ["今天", "今日", "今日支出"],
       MONTH: ["本月", "當月", "本月統計"],
@@ -109,11 +108,22 @@ async function handleEvent(event) {
 
       if (!deleted) {
 
-        await replyText(event.replyToken, "沒有資料可以刪除");
+        // await replyText(event.replyToken, "沒有資料可以刪除");
+        await client.replyMessage(
+          event.replyToken,
+          createErrorFlex("沒有資料可以刪除")
+        );
         return;
       }
 
-      await replyText(event.replyToken, `已刪除：${deleted.item} ${deleted.amount}`);
+      // await replyText(event.replyToken, `已刪除：${deleted.item} ${deleted.amount}`);
+      await client.replyMessage(
+        event.replyToken,
+        createDeleteFlex(
+          deleted.item,
+          deleted.amount
+        )
+      );
       return;
     }
 
@@ -121,7 +131,11 @@ async function handleEvent(event) {
 
       const deletedCount = deleteTodayRecords(lineUserId);
 
-      await replyText(event.replyToken, `已刪除今天 ${deletedCount} 筆資料`);
+      // await replyText(event.replyToken, `已刪除今天 ${deletedCount} 筆資料`);
+      await client.replyMessage(
+          event.replyToken,
+          createDeleteTodayFlex(deletedCount)
+        );
       return;
     }
 
@@ -132,28 +146,36 @@ async function handleEvent(event) {
 
       if (rows.length === 0) {
 
-        await replyText(event.replyToken, "今天還沒有記帳資料");
+        // await replyText(event.replyToken, "今天還沒有記帳資料");
+        await client.replyMessage(
+          event.replyToken,
+          createErrorFlex("今天還沒有記帳資料")
+        );
         return;
       }
 
       let total = 0;
 
-      const messages = rows.map(row => {
+      // const messages = rows.map(row => {
 
-        total += Number(row.amount);
+      //   total += Number(row.amount);
 
-        return `${row.item} ${row.amount}（${row.category}）`;
-      });
+      //   return `${row.item} ${row.amount}（${row.category}）`;
+      // });
 
-      const result = [
-        "📒 今日支出",
-        "",
-        ...messages,
-        "",
-        `💰 總計：${total} 元`
-      ].join("\n");
+      // const result = [
+      //   "📒 今日支出",
+      //   "",
+      //   ...messages,
+      //   "",
+      //   `💰 總計：${total} 元`
+      // ].join("\n");
 
-      await replyText(event.replyToken, result);
+      // await replyText(event.replyToken, result);
+      await client.replyMessage(
+        event.replyToken,
+        createTodayFlex(rows, total)
+      );
 
       return;
     }
@@ -164,7 +186,11 @@ async function handleEvent(event) {
 
       if (rows.length === 0) {
 
-        await replyText(event.replyToken, "本月還沒有記帳資料");
+        // await replyText(event.replyToken, "本月還沒有記帳資料");
+        await client.replyMessage(
+          event.replyToken,
+          createErrorFlex("本月還沒有記帳資料")
+        );
         return;
       }
 
@@ -201,7 +227,7 @@ async function handleEvent(event) {
 
       const flexMessage = createMonthFlex(summary, total); 
       await client.replyMessage( event.replyToken, flexMessage );
-      
+
       return;
     }
 
@@ -210,22 +236,30 @@ async function handleEvent(event) {
       const rows = getCategoryRanking(lineUserId);
 
       if (rows.length === 0) {
-        await replyText(event.replyToken, "本月還沒有資料");
+        // await replyText(event.replyToken, "本月還沒有資料");
+        await client.replyMessage(
+          event.replyToken,
+          createErrorFlex("本月還沒有資料")
+        );
         return;
       }
 
-      const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+      // const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
 
-      let result = "📊 本月支出排行\n\n";
+      // let result = "📊 本月支出排行\n\n";
 
-      rows.forEach((row, index) => {
+      // rows.forEach((row, index) => {
 
-        const medal = medals[index] || `${index + 1}️⃣`;
+      //   const medal = medals[index] || `${index + 1}️⃣`;
 
-        result += `${medal} ${row.category}：${row.total} 元\n`;
-      });
+      //   result += `${medal} ${row.category}：${row.total} 元\n`;
+      // });
 
-      await replyText(event.replyToken, result);
+      // await replyText(event.replyToken, result);
+      await client.replyMessage(
+        event.replyToken,
+        createRankFlex(rows)
+      );
       return;
     }
 
@@ -249,9 +283,14 @@ async function handleEvent(event) {
 
     if (commands.HELP.includes(text)) {
 
-      await replyText(
+      // await replyText(
+      //   event.replyToken,
+      //   getHelpMessage()
+      // );
+
+      await client.replyMessage(
         event.replyToken,
-        getHelpMessage()
+        createHelpFlex()
       );
 
       return;
@@ -281,42 +320,60 @@ async function handleEvent(event) {
         continue;
       }
 
-      successMessages.push(
-        `${item} ${amount}（${category}）`
-      );
+      // successMessages.push(
+      //   `${item} ${amount}（${category}）`
+      // );
+      successMessages.push({
+        item,
+        amount,
+        category
+      });
     }
 
     if (successMessages.length === 0) {
 
-      const helpMessage = [
-        "❌ 無法辨識輸入內容",
-        "",
-        "請輸入：",
-        "午餐 100",
-        "",
-        "或輸入以下功能：",
-        "今天 / 本月 / 排行 / 圖表 / 撤銷"
-      ].join("\n");
+      // const helpMessage = [
+      //   "❌ 無法辨識輸入內容",
+      //   "",
+      //   "請輸入：",
+      //   "午餐 100",
+      //   "",
+      //   "或輸入以下功能：",
+      //   "今天 / 本月 / 排行 / 圖表 / 撤銷"
+      // ].join("\n");
 
-      await replyText(event.replyToken, helpMessage);
+      // await replyText(event.replyToken, helpMessage);
+      await client.replyMessage(
+        event.replyToken,
+        createInputErrorFlex()
+      );
       return;
     }
 
-    const result = [
-        "📒 已記錄：",
-        "",
-        ...successMessages
-      ].join("\n");
+    // const result = [
+    //     "📒 已記錄：",
+    //     "",
+    //     ...successMessages
+    //   ].join("\n");
 
-    await replyText(event.replyToken, result);
+    // await replyText(event.replyToken, result);
+    await client.replyMessage(
+      event.replyToken,
+      createRecordSuccessFlex(successMessages)
+    );
 
   } catch (err) {
 
     console.error("❌ handleEvent error:", err);
 
-    await replyText(
+    // await replyText(
+    //   event.replyToken,
+    //   "系統忙碌中，請稍後再試"
+    // );
+
+    await replyFlex(
       event.replyToken,
-      "系統忙碌中，請稍後再試"
+      createErrorFlex("系統忙碌中，請稍後再試")
     );
   }
 
@@ -518,6 +575,139 @@ function getHelpMessage() {
 }
 
 
+function createHeader(title, color = "#27ACB2") {
+  return {
+    type: "box",
+    layout: "vertical",
+    backgroundColor: color,
+    paddingAll: "15px",
+    contents: [
+      {
+        type: "text",
+        text: title,
+        color: "#FFFFFF",
+        weight: "bold",
+        size: "lg"
+      }
+    ]
+  };
+}
+
+function createRecordSuccessFlex(records) {
+
+  const rows = records.map(item => ({
+    type: "box",
+    layout: "horizontal",
+    margin: "md",
+    contents: [
+        {
+          type: "text",
+          text: getCategoryEmoji(record.category),
+          flex: 0
+        },
+        {
+          type: "text",
+          text: record.item,
+          flex: 3
+        },
+        {
+          type: "text",
+          text: `$${record.amount}`,
+          flex: 2,
+          align: "end",
+          weight: "bold"
+        }
+    ]
+  }));
+
+  return {
+    type: "flex",
+    altText: "記帳成功",
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: createHeader("📒 已記錄"),
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: rows
+      }
+    }
+  };
+}
+
+function createTodayFlex(rows, total) {
+
+  const contents = rows.map(row => ({
+    type: "box",
+    layout: "horizontal",
+    margin: "sm",
+    contents: [
+      {
+        type: "text",
+        text: getCategoryEmoji(row.category),
+        flex: 0
+      },
+      {
+        type: "text",
+        text: row.item,
+        flex: 3,
+        size: "sm"
+      },
+      {
+        type: "text",
+        text: `$${row.amount}`,
+        align: "end",
+        flex: 2,
+        weight: "bold",
+        size: "sm"
+      }
+    ]
+  }));
+
+  contents.push(
+    {
+      type: "separator",
+      margin: "lg"
+    },
+    {
+      type: "box",
+      layout: "horizontal",
+      margin: "lg",
+      contents: [
+        {
+          type: "text",
+          text: "總計",
+          weight: "bold"
+        },
+        {
+          type: "text",
+          text: `$${total}`,
+          align: "end",
+          weight: "bold",
+          color: "#27ACB2"
+        }
+      ]
+    }
+  );
+
+  return {
+    type: "flex",
+    altText: "今日支出",
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: createHeader("📅 今日支出"),
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents
+      }
+    }
+  };
+}
+
+
 function createMonthFlex(summary, total) {
 
   const contents = [];
@@ -561,17 +751,11 @@ function createMonthFlex(summary, total) {
     contents: {
       type: "bubble",
       size: "mega",
+      header: createHeader("📊 本月支出統計"),
       body: {
         type: "box",
         layout: "vertical",
         contents: [
-
-          {
-            type: "text",
-            text: "📊 本月支出統計",
-            weight: "bold",
-            size: "xl"
-          },
 
           {
             type: "separator",
@@ -612,6 +796,253 @@ function createMonthFlex(summary, total) {
   };
 }
 
+function createRankFlex(rows) {
+
+  const medals = [
+    "🥇",
+    "🥈",
+    "🥉",
+    "4️⃣",
+    "5️⃣"
+  ];
+
+  const contents = rows.map((row, index) => ({
+    type: "box",
+    layout: "horizontal",
+    margin: "md",
+    contents: [
+      {
+        type: "text",
+        text: medals[index] || `${index + 1}`,
+        flex: 1
+      },
+      {
+        type: "text",
+        text: row.category,
+        flex: 3
+      },
+      {
+        type: "text",
+        text: `$${row.total}`,
+        flex: 2,
+        align: "end",
+        weight: "bold"
+      }
+    ]
+  }));
+
+  return {
+    type: "flex",
+    altText: "支出排行",
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: createHeader("🏆 本月支出排行"),
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents
+      }
+    }
+  };
+}
+
+
+function createDeleteFlex(item, amount) {
+
+  return {
+    type: "flex",
+    altText: "刪除成功",
+    contents: {
+      type: "bubble",
+      header: createHeader("🗑️ 已刪除", "#E74C3C"),
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "text",
+            text: item,
+            weight: "bold",
+            size: "lg"
+          },
+          {
+            type: "text",
+            text: `$${amount}`,
+            margin: "md",
+            color: "#E74C3C"
+          }
+        ]
+      }
+    }
+  };
+}
+
+function createDeleteTodayFlex(count) {
+
+  return {
+    type: "flex",
+    altText: `已刪除今天 ${count} 筆資料`,
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: createHeader(
+        "🗑️ 已刪除今日資料",
+        "#E74C3C"
+      ),
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          {
+            type: "text",
+            text: "刪除完成",
+            weight: "bold",
+            size: "lg",
+            align: "center"
+          },
+          {
+            type: "text",
+            text: `${count}`,
+            size: "4xl",
+            weight: "bold",
+            color: "#E74C3C",
+            align: "center"
+          },
+          {
+            type: "text",
+            text: "筆今日記錄已刪除",
+            size: "sm",
+            color: "#666666",
+            align: "center"
+          }
+        ]
+      }
+    }
+  };
+}
+
+function createHelpFlex() {
+
+  return {
+    type: "flex",
+    altText: "使用說明",
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: createHeader("📘 使用說明"),
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          {
+            type: "text",
+            text: "✏️ 記帳",
+            weight: "bold"
+          },
+          {
+            type: "text",
+            text: "午餐 100\n咖啡 80",
+            size: "sm"
+          },
+          {
+            type: "separator"
+          },
+          {
+            type: "text",
+            text: "📊 查詢",
+            weight: "bold"
+          },
+          {
+            type: "text",
+            text: "今天\n本月\n排行\n圖表",
+            size: "sm"
+          },
+          {
+            type: "separator"
+          },
+          {
+            type: "text",
+            text: "🗑️ 操作",
+            weight: "bold"
+          },
+          {
+            type: "text",
+            text: "撤銷\n刪除今天",
+            size: "sm"
+          }
+        ]
+      }
+    }
+  };
+}
+
+function createErrorFlex(message) {
+
+  return {
+    type: "flex",
+    altText: "錯誤",
+    contents: {
+      type: "bubble",
+      header: createHeader("⚠️ 提示", "#FF9800"),
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "text",
+            text: message,
+            wrap: true
+          }
+        ]
+      }
+    }
+  };
+}
+
+function createInputErrorFlex() {
+  return {
+    type: "flex",
+    altText: "輸入錯誤",
+    contents: {
+      type: "bubble",
+      header: createHeader("❌ 無法辨識"),
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          {
+            type: "text",
+            text: "請輸入：",
+            weight: "bold"
+          },
+          {
+            type: "text",
+            text: "午餐 100\n咖啡 80",
+            size: "sm"
+          },
+          {
+            type: "separator"
+          },
+          {
+            type: "text",
+            text: "可使用功能",
+            weight: "bold"
+          },
+          {
+            type: "text",
+            text: "今天 / 本月 / 排行 / 圖表 / 撤銷",
+            wrap: true,
+            size: "sm"
+          }
+        ]
+      }
+    }
+  };
+}
 
 function getCategoryEmoji(category) {
 
