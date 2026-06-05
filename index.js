@@ -4,7 +4,6 @@ const express = require("express");
 const line = require("@line/bot-sdk");
 //const { GoogleSpreadsheet } = require("google-spreadsheet");
 const db = require("./db");
-const axios = require("axios");
 const parseExpense = require("./parseExpense");
 
 const app = express();
@@ -44,9 +43,11 @@ function addRow(lineUserId, item, amount) {
     );
 
     console.log("✔ 已寫入 SQLite");
+    return true;
 
   } catch (err) { 
     console.error("❌ addRow error:", err); 
+    return false;
   }
 }
 
@@ -65,81 +66,180 @@ app.post("/callback", line.middleware(config), async (req, res) => {
 });
 
 
-async function handleEvent(event) {
-
-  // 只處理文字訊息
-  if (event.type !== "message") return;
-
-  if (!event.message || !event.message.text) return;
-
-  if (!event.replyToken) return;
-  if (!event.source || !event.source.userId) return;
-
-  const lineUserId = event.source.userId;
-  const text = event.message.text.trim();
-
-  if (text === "刪除" || text === "撤銷" || text === "撤回") {
-
-    const deleted = deleteLastRecord(lineUserId);
-
-    if (!deleted) {
-
-      await client.replyMessage(
-        event.replyToken,
-        [
-          {
-            type: "text",
-            text: "沒有資料可以刪除",
-          },
-        ]
-      );
-
-      return;
-    }
-
-    await client.replyMessage(
-      event.replyToken,
-      [
-        {
-          type: "text",
-          text: `已刪除：${deleted.item} ${deleted.amount}`,
-        },
-      ]
-    );
-
-    return;
-  }
-
-  if (text === "刪除今天") {
-
-  const deletedCount = deleteTodayRecords(lineUserId);
+async function replyText(replyToken, text) {
 
   await client.replyMessage(
-    event.replyToken,
+    replyToken,
     [
       {
         type: "text",
-        text: `已刪除今天 ${deletedCount} 筆資料`,
+        text: text,
       },
     ]
   );
-
-  return;
 }
 
-  if (text === "今天" || text === "今天明細") {
+async function handleEvent(event) {
 
-    //const rows = await getTodayRecords();
-    const rows = getTodayRecords(lineUserId);
+  try {
+    // 只處理文字訊息
+    if (event.type !== "message") return;
 
-    if (rows.length === 0) {
+    if (!event.message || !event.message.text) return;
+
+    if (!event.replyToken) return;
+    if (!event.source || !event.source.userId) return;
+
+    const lineUserId = event.source.userId;
+    const text = event.message.text.trim();
+
+    const undoCommands = ["刪除","撤銷","撤回","撤銷上一筆"];
+    const commands = {
+      TODAY: ["今天", "今日", "今日支出"],
+      MONTH: ["本月", "當月", "本月統計"],
+      RANK: ["排行", "分類排行"],
+      CHART: ["圖表", "支出圖表"],
+      HELP: ["說明", "help"],
+      UNDO: ["刪除", "撤銷", "撤回", "撤銷上一筆"]
+    };
+
+    if (commands.UNDO.includes(text)) {
+
+      const deleted = deleteLastRecord(lineUserId);
+
+      if (!deleted) {
+
+        await replyText(event.replyToken, "沒有資料可以刪除");
+        return;
+      }
+
+      await replyText(event.replyToken, `已刪除：${deleted.item} ${deleted.amount}`);
+      return;
+    }
+
+    if (text === "刪除今天") {
+
+      const deletedCount = deleteTodayRecords(lineUserId);
+
+      await replyText(event.replyToken, `已刪除今天 ${deletedCount} 筆資料`);
+      return;
+    }
+
+    if (commands.TODAY.includes(text)) {
+
+      //const rows = await getTodayRecords();
+      const rows = getTodayRecords(lineUserId);
+
+      if (rows.length === 0) {
+
+        await replyText(event.replyToken, "今天還沒有記帳資料");
+        return;
+      }
+
+      let total = 0;
+
+      const messages = rows.map(row => {
+
+        total += Number(row.amount);
+
+        return `${row.item} ${row.amount}（${row.category}）`;
+      });
+
+      const result = [
+        "📒 今日支出",
+        "",
+        ...messages,
+        "",
+        `💰 總計：${total} 元`
+      ].join("\n");
+
+      await replyText(event.replyToken, result);
+
+      return;
+    }
+
+    if (commands.MONTH.includes(text)) {
+
+      const rows = getMonthRecords(lineUserId);
+
+      if (rows.length === 0) {
+
+        await replyText(event.replyToken, "本月還沒有記帳資料");
+        return;
+      }
+
+      // 分類統計
+      const summary = {};
+
+      let total = 0;
+
+      rows.forEach(row => {
+
+        const category = row.category || "其他";
+
+        const amount = Number(row.amount);
+
+        total += amount;
+
+        if (!summary[category]) {
+          summary[category] = 0;
+        }
+
+        summary[category] += amount;
+      });
+
+      // 組訊息
+      // let result = "📊 本月支出統計\n\n";
+
+      // for (const category in summary) {
+      //   result += `${category}：${summary[category]} 元\n`;
+      // }
+
+      // result += `\n💰 本月總計：${total} 元`;
+
+      // await replyText(event.replyToken, result);
+
+      const flexMessage = createMonthFlex(summary, total); 
+      await client.replyMessage( event.replyToken, flexMessage );
+      
+      return;
+    }
+
+    if (commands.RANK.includes(text)) {
+
+      const rows = getCategoryRanking(lineUserId);
+
+      if (rows.length === 0) {
+        await replyText(event.replyToken, "本月還沒有資料");
+        return;
+      }
+
+      const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+
+      let result = "📊 本月支出排行\n\n";
+
+      rows.forEach((row, index) => {
+
+        const medal = medals[index] || `${index + 1}️⃣`;
+
+        result += `${medal} ${row.category}：${row.total} 元\n`;
+      });
+
+      await replyText(event.replyToken, result);
+      return;
+    }
+
+    if (commands.CHART.includes(text)) {
+
+      const chartUrl = generatePieChart(lineUserId);
 
       await client.replyMessage(
         event.replyToken,
         [
           {
-            type: "text",
-            text: "今天還沒有記帳資料",
+            type: "image",
+            originalContentUrl: chartUrl,
+            previewImageUrl: chartUrl,
           },
         ]
       );
@@ -147,205 +247,78 @@ async function handleEvent(event) {
       return;
     }
 
-    let total = 0;
+    if (commands.HELP.includes(text)) {
 
-    const messages = rows.map(row => {
+      await replyText(
+        event.replyToken,
+        getHelpMessage()
+      );
 
-      total += Number(row.amount);
+      return;
+    }
 
-      return `${row.item} ${row.amount}（${row.category}）`;
-    });
+    const lines = text.split("\n");
+
+    let successMessages = [];
+
+    for (const lineText of lines) {
+
+      const parsed = parseExpense(lineText);
+
+      if (!parsed) {
+        continue;
+      }
+
+      const { item, amount } = parsed;
+      
+      if (!amount || amount <= 0) continue;
+
+      const category = getCategory(item);
+      
+      const success = addRow(lineUserId, item, amount);
+
+      if (!success) {
+        continue;
+      }
+
+      successMessages.push(
+        `${item} ${amount}（${category}）`
+      );
+    }
+
+    if (successMessages.length === 0) {
+
+      const helpMessage = [
+        "❌ 無法辨識輸入內容",
+        "",
+        "請輸入：",
+        "午餐 100",
+        "",
+        "或輸入以下功能：",
+        "今天 / 本月 / 排行 / 圖表 / 撤銷"
+      ].join("\n");
+
+      await replyText(event.replyToken, helpMessage);
+      return;
+    }
 
     const result = [
-      "📒 今天支出",
-      "",
-      ...messages,
-      "",
-      `💰 總計：${total} 元`
-    ].join("\n");
+        "📒 已記錄：",
+        "",
+        ...successMessages
+      ].join("\n");
 
-    await client.replyMessage(
+    await replyText(event.replyToken, result);
+
+  } catch (err) {
+
+    console.error("❌ handleEvent error:", err);
+
+    await replyText(
       event.replyToken,
-      [
-        {
-          type: "text",
-          text: result,
-        },
-      ]
-    );
-
-    return;
-  }
-
-  if (text === "本月" || text === "當月" || text === "這個月") {
-
-    const rows = getMonthRecords(lineUserId);
-
-    if (rows.length === 0) {
-
-      await client.replyMessage(
-        event.replyToken,
-        [
-          {
-            type: "text",
-            text: "本月還沒有記帳資料",
-          },
-        ]
-      );
-
-      return;
-    }
-
-    // 分類統計
-    const summary = {};
-
-    let total = 0;
-
-    rows.forEach(row => {
-
-      const category = row.category || "其他";
-
-      const amount = Number(row.amount);
-
-      total += amount;
-
-      if (!summary[category]) {
-        summary[category] = 0;
-      }
-
-      summary[category] += amount;
-    });
-
-    // 組訊息
-    let result = "📊 本月支出統計\n\n";
-
-    for (const category in summary) {
-      result += `${category}：${summary[category]} 元\n`;
-    }
-
-    result += `\n💰 本月總計：${total} 元`;
-
-    await client.replyMessage(
-      event.replyToken,
-      [
-        {
-          type: "text",
-          text: result,
-        },
-      ]
-    );
-
-    return;
-  }
-
-  if (text === "排行") {
-
-    const rows = getCategoryRanking(lineUserId);
-
-    if (rows.length === 0) {
-      await client.replyMessage(event.replyToken, [
-        {
-          type: "text",
-          text: "本月還沒有資料"
-        }
-      ]);
-      return;
-    }
-
-    const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
-
-    let result = "📊 本月支出排行\n\n";
-
-    rows.forEach((row, index) => {
-
-      const medal = medals[index] || `${index + 1}️⃣`;
-
-      result += `${medal} ${row.category}：${row.total} 元\n`;
-    });
-
-    await client.replyMessage(event.replyToken, [
-      {
-        type: "text",
-        text: result
-      }
-    ]);
-
-    return;
-  }
-
-  if (text === "圖表") {
-
-    const chartUrl = generatePieChart(lineUserId);
-
-    await client.replyMessage(
-      event.replyToken,
-      [
-        {
-          type: "image",
-          originalContentUrl: chartUrl,
-          previewImageUrl: chartUrl,
-        },
-      ]
-    );
-
-    return;
-  }
-
-  const lines = text.split("\n");
-
-  let successMessages = [];
-
-  for (const lineText of lines) {
-
-    const parsed = parseExpense(lineText);
-
-    if (!parsed) {
-      continue;
-    }
-
-    const { item, amount } = parsed;
-    
-    if (!amount || amount <= 0) continue;
-
-    const category = getCategory(item);
-
-    addRow(lineUserId, item, amount);
-
-    successMessages.push(
-      `${item} ${amount}（${category}）`
+      "系統忙碌中，請稍後再試"
     );
   }
-
-  if (successMessages.length === 0) {
-
-    await client.replyMessage(
-      event.replyToken,
-      [
-        {
-          type: "text",
-          text: "格式錯誤\n例如：午餐 100",
-        },
-      ]
-    );
-
-    return;
-  }
-
-  const result = [
-      "📒 已記錄：",
-      "",
-      ...successMessages
-    ].join("\n");
-
-  await client.replyMessage(
-    event.replyToken,
-    [
-      {
-        type: "text",
-        text: result,
-      },
-    ]
-  );
 
 }
 
@@ -521,4 +494,139 @@ function getCategory(item) {
   }
 
   return "其他";
+}
+
+function getHelpMessage() {
+
+  return [
+    "📘 記帳小幫手使用說明",
+    "",
+    "✏️ 記帳",
+    "午餐 100",
+    "咖啡 80",
+    "",
+    "📊 查詢",
+    "今天",
+    "本月",
+    "排行",
+    "圖表",
+    "",
+    "🗑️ 操作",
+    "撤銷",
+    "刪除今天"
+  ].join("\n");
+}
+
+
+function createMonthFlex(summary, total) {
+
+  const contents = [];
+
+  for (const category in summary) {
+
+    contents.push({
+      type: "box",
+      layout: "horizontal",
+      margin: "md",
+      contents: [
+        {
+          type: "text",
+          text: getCategoryEmoji(category),
+          flex: 0,
+          size: "sm"
+        },
+        {
+          type: "text",
+          text: category,
+          size: "sm",
+          color: "#555555",
+          flex: 2
+        },
+        {
+          type: "text",
+          text: `$${summary[category]}`,
+          size: "sm",
+          color: "#111111",
+          align: "end",
+          flex: 2,
+          weight: "bold"
+        }
+      ]
+    });
+  }
+
+  return {
+    type: "flex",
+    altText: "本月支出統計",
+    contents: {
+      type: "bubble",
+      size: "mega",
+      body: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+
+          {
+            type: "text",
+            text: "📊 本月支出統計",
+            weight: "bold",
+            size: "xl"
+          },
+
+          {
+            type: "separator",
+            margin: "lg"
+          },
+
+          ...contents,
+
+          {
+            type: "separator",
+            margin: "lg"
+          },
+
+          {
+            type: "box",
+            layout: "horizontal",
+            margin: "lg",
+            contents: [
+              {
+                type: "text",
+                text: "總計",
+                weight: "bold",
+                size: "md"
+              },
+              {
+                type: "text",
+                text: `$${total}`,
+                align: "end",
+                weight: "bold",
+                size: "lg",
+                color: "#27ACB2"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  };
+}
+
+
+function getCategoryEmoji(category) {
+
+  switch (category) {
+
+    case "餐飲":
+      return "🍱";
+
+    case "飲料":
+      return "🥤";
+
+    case "交通":
+      return "🚇";
+
+    default:
+      return "📦";
+  }
 }
